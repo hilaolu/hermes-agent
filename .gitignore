@@ -20,6 +20,9 @@ act/
 .env.production.local
 .env.development
 .env.test
+# Local GitHub credentials are never source or build inputs.
+/find_grained_token
+/fine_grained_token
 .hermes-docker/
 .notebooklm-home/
 .notebooklm-cli-venv/

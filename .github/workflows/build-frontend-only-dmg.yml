@@ -1,0 +1,99 @@
+name: Build frontend-only macOS DMG
+
+on:
+  workflow_dispatch:
+  # A newly added workflow cannot be dispatched until it exists on the
+  # default branch. This branch trigger lets a fork build it before merging.
+  push:
+    branches:
+      - 'desktop-dmg/**'
+    paths:
+      - '.github/workflows/build-frontend-only-dmg.yml'
+      - 'apps/desktop/**'
+      - 'apps/shared/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-only-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Apple Silicon DMG
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      # Personal builds are unsigned unless Apple signing credentials are
+      # deliberately added in a separate, protected release workflow.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - name: Check out source without retaining credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Install npm 12
+        run: npm install --global npm@12.0.2
+
+      - name: Install JavaScript dependencies
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci
+
+      - name: Build unsigned runtime-thin DMG
+        working-directory: apps/desktop
+        env:
+          # Never expose a PAT to electron-builder. With a token and no
+          # explicit policy it can infer publishing to the upstream repo.
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: |
+          npm run build
+          npm run builder -- --mac dmg --publish never
+
+      - name: Validate the thin Desktop bundle
+        working-directory: apps/desktop
+        run: |
+          HERMES_DESKTOP_SKIP_BUILD=1 npm run test:desktop:all
+
+          app='release/mac-arm64/Hermes.app'
+          if [[ ! -d "$app" ]]; then
+            echo "Expected Apple Silicon app bundle not found: $app" >&2
+            exit 1
+          fi
+          if [[ -e "$app/Contents/Resources/hermes-agent" ]]; then
+            echo 'Hermes Agent runtime unexpectedly present in the Desktop bundle.' >&2
+            exit 1
+          fi
+
+          shopt -s nullglob
+          dmgs=(release/*.dmg)
+          if [[ ${#dmgs[@]} -ne 1 ]]; then
+            echo "Expected exactly one DMG, found ${#dmgs[@]}." >&2
+            exit 1
+          fi
+          hdiutil verify "${dmgs[0]}"
+          shasum -a 256 "${dmgs[0]}" > release/SHA256SUMS.txt
+
+      - name: Upload DMG and checksum
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Hermes-frontend-only-macos-arm64-${{ github.sha }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
