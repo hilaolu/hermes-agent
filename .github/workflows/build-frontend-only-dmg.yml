@@ -85,7 +85,10 @@ jobs:
             exit 1
           fi
           hdiutil verify "${dmgs[0]}"
-          shasum -a 256 "${dmgs[0]}" > release/SHA256SUMS.txt
+          (
+            cd release
+            shasum -a 256 "$(basename "${dmgs[0]}")" > SHA256SUMS.txt
+          )
 
       - name: Upload DMG and checksum
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
