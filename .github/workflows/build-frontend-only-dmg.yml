@@ -58,7 +58,7 @@ jobs:
           # Never expose a PAT to electron-builder. With a token and no
           # explicit policy it can infer publishing to the upstream repo.
           GH_TOKEN: ''
-          GITHUB_TOKEN: ''
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm run build
           npm run builder -- --mac dmg --publish never
