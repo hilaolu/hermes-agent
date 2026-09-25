@@ -59,6 +59,7 @@ jobs:
           # explicit policy it can infer publishing to the upstream repo.
           GH_TOKEN: ''
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HERMES_PYTHON: 'python3'
         run: |
           npm run build
           npm run builder -- --mac dmg --publish never
